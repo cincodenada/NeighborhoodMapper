@@ -55,7 +55,7 @@ if(empty($data['key'])) {
             $data,
             array('safe' => true, 'upsert' => true)
         );
-        $success = ($status['err'] == null);
+        $success = ($status['err'] == null && $status['n'] > 0);
     } catch (MongoCursorException $e) {
         $success = false;
     }
