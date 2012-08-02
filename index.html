@@ -173,8 +173,14 @@
             }
           });
           map.fitBounds(mapbounds);
+          setLink(data.key);
+      }
+
+      function setLink(key) {
           loc = window.location.href.split('?')[0];
-          $('#savelink').val(loc + '?k=' + data.key);
+          savelink = loc + '?k=' + key;
+          $('#savelink').val(savelink);
+          $('#mapurl').attr('href',savelink);
       }
 
       $(function() {
@@ -199,7 +205,7 @@
           $.post('savemap.php',{'mapdata':JSON.stringify(savedata)},function(data) {
             if(data.success) {
               alert("Saved!");
-              $('#savelink').val(loc + '?k=' + savedata.key);
+              setLink(savedata.key);
             } else {
               alert("Hmm, something went wrong saving.  If the error persists, use the recovery box.");
             }
@@ -220,7 +226,7 @@
     <div style="width:15%; height:100%; float:left;">
       <!-- <input type="button" id="reset" value="Reset"/> -->
       <input type="button" id="save" value="Save"/><br/>
-      This map's URL:
+      <a id="mapurl">This map's URL</a>:
       <input type="text" name="savelink" id="savelink"/>
       <hr/>
       Recovery Box:
