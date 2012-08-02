@@ -22,6 +22,8 @@ function genKey($int, $padding = 3) {
 }
 
 $data = json_decode($_POST['mapdata'],true);
+$data['version'] = '1';
+
 if(empty($data['key'])) {
     //If it is new, save it to the db
     $success = false;
@@ -51,7 +53,7 @@ if(empty($data['key'])) {
         $status = $hoods->update(
             array('key' => $data['key']),
             $data,
-            array('safe' => true)
+            array('safe' => true, 'upsert' => true)
         );
         $success = ($status['err'] == null);
     } catch (MongoCursorException $e) {
