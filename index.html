@@ -1,0 +1,243 @@
+<!-- vim: ts=2:sw=2:sts=2: 
+-->
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no" />
+    <style type="text/css">
+      html { height: 100% }
+      body { height: 100%; margin: 0; padding: 0 }
+      #map_canvas { height: 100% }
+    </style>
+
+    <script type="text/javascript"
+      src="https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js">
+    </script>
+    <script type="text/javascript"
+      src="http://maps.googleapis.com/maps/api/js?key=AIzaSyBjcIHLyfJzQl1M2eNm7620wXGFQhAvX60&sensor=false&libraries=drawing">
+    </script>
+
+    <script type="text/javascript">
+      var nhlist = new google.maps.MVCArray();
+      var curpoly;
+      var map, drawingManager, editNeighborhood;
+      var shiftDown;
+      var key;
+      var savedata = {};
+
+      if (!google.maps.Polygon.prototype.getBounds) {
+        google.maps.Polygon.prototype.getBounds = function(latLng) {
+          var bounds = new google.maps.LatLngBounds();
+          var paths = this.getPaths();
+          var path;
+          
+          for (var p = 0; p < paths.getLength(); p++) {
+            path = paths.getAt(p);
+            for (var i = 0; i < path.getLength(); i++) {
+              bounds.extend(path.getAt(i));
+            }
+          }
+          
+          return bounds;
+        }
+      }
+      if (!google.maps.Polygon.prototype.setActive) {
+        google.maps.Polygon.prototype.setActive = function(force) {
+          if(!this.getEditable() || force) {
+            mymap = this.getMap();
+            if(oldpoly = mymap.get('curpoly'))
+              oldpoly.setEditable(false);
+            mymap.set('curpoly', this);
+            this.setEditable(true);
+          }
+        }
+      }
+
+      $.extend({
+        getUrlVars: function(){
+          var vars = [], hash;
+          var hashes = window.location.href.slice(window.location.href.indexOf('?') + 1).split('&');
+          for(var i = 0; i < hashes.length; i++)
+          {
+            hash = hashes[i].split('=');
+            vars.push(hash[0]);
+            vars[hash[0]] = hash[1];
+          }
+          return vars;
+        },
+        getUrlVar: function(name){
+          return $.getUrlVars()[name];
+        }
+      });
+
+      var polyOptions = {
+        fillColor: '#0000ff',
+        fillOpacity: 0.2,
+        strokeWeight: 3,
+        clickable: true,
+        zIndex: 1,
+      };
+
+      function initialize() {
+        mapOptions = {
+          center: new google.maps.LatLng(45.523037,-122.66746),
+          zoom: 10,
+          mapTypeId: google.maps.MapTypeId.ROADMAP
+        };
+        map = new google.maps.Map(document.getElementById("map_canvas"),
+            mapOptions);
+        drawingManager = new google.maps.drawing.DrawingManager({
+          drawingMode: google.maps.drawing.OverlayType.POLYGON,
+          drawingControl: true,
+          drawingControlOptions: {
+            position: google.maps.ControlPosition.TOP_CENTER,
+            drawingModes: [google.maps.drawing.OverlayType.POLYGON]
+          },
+          polygonOptions: $.extend({}, polyOptions, {editable: true}),
+        });
+
+        drawingManager.setMap(map);
+        editNeighborhood = new google.maps.InfoWindow({
+          content: document.getElementById('editor')
+        }); 
+        google.maps.event.addListener(editNeighborhood,'closeclick',saveName);
+        $('#editor form').submit(function() {
+          map.get('curpoly').set('name',$(this).find('#name').val());
+          editNeighborhood.close();
+          return false;
+        });
+
+        google.maps.event.addListener(drawingManager, 'polygoncomplete', function(polygon) {
+          google.maps.event.addListener(polygon,'click',polyClick);
+          length = nhlist.push(polygon);
+          polygon.set('name','');
+          polygon.setActive(true);
+          editName(polygon);
+        });
+
+        $(window).keydown(function(evt) {
+            if(evt.shiftKey || evt.keyCode == 16) { shiftDown = true; }
+        });
+        $(window).keyup(function(evt) {
+            shiftDown = false;
+        });
+      }
+
+      function polyClick(evt) {
+        if(typeof evt.vertex != 'undefined' && shiftDown) {
+          this.getPath().removeAt(evt.vertex);
+        } else {
+          saveName();
+          this.setActive();
+          editName(this);
+        }
+      }
+
+      function saveName() {
+        enCont = $(editNeighborhood.getContent());
+        if(newname = enCont.find('#name').val()) {
+          map.get('curpoly').set('name',newname);
+        }
+      }
+
+      function editName(polygon) {
+        enCont = $(editNeighborhood.getContent());
+        editNeighborhood.setPosition(polygon.getBounds().getCenter());
+        enCont.find('#name').val(polygon.get('name')); 
+        map.set('curpoly',polygon);
+        editNeighborhood.open(map);
+        enCont.find('#name').get(0).focus();
+      }
+
+      function loadMap(data) {
+        resp = $.get('loadmap.php',{'k':key},drawMap,'json');
+      }
+
+      function drawMap(data) {
+          savedata = data;
+          $('#recoverybox').val(JSON.stringify(savedata));
+
+          mapbounds = new google.maps.LatLngBounds();
+          $.each(data.hoods,function(idx, poly) {
+            if(poly.vertices.length) {
+              verts = [];
+              $.each(poly.vertices, function(idx, vert) {
+                verts.push(new google.maps.LatLng(vert[0],vert[1]));
+              });
+              newpoly = new google.maps.Polygon($.extend({}, polyOptions, {paths: verts}));
+              newpoly.set('name',poly.name);
+              newpoly.setMap(map);
+              nhlist.push(newpoly);
+              google.maps.event.addListener(newpoly,'click',polyClick);
+              mapbounds.union(newpoly.getBounds());
+            }
+          });
+          map.fitBounds(mapbounds);
+          loc = window.location.href.split('?')[0];
+          $('#savelink').val(loc + '?k=' + data.key);
+      }
+
+      $(function() {
+        $('#save').click(function() {
+          polylist = [];
+          nhlist.forEach(function(poly, idx) {
+            vertList = [];
+            if(verts = poly.getPath()) {
+              verts.forEach(function(vertex, idx) {
+                lat = vertex.lat();
+                lng = vertex.lng();
+                vertList.push([lat, lng]);
+              });
+              polylist.push({
+                "name": poly.get('name'),
+                "vertices": vertList 
+              });
+            }
+          });
+          savedata.hoods = polylist;
+          $('#recoverybox').val(JSON.stringify(savedata));
+          $.post('savemap.php',{'mapdata':JSON.stringify(savedata)},function(data) {
+            if(data.success) {
+              alert("Saved!");
+              $('#savelink').val(loc + '?k=' + savedata.key);
+            } else {
+              alert("Hmm, something went wrong saving.  If the error persists, use the recovery box.");
+            }
+          },'json');
+        });
+        $('#load').click(function() {
+          drawMap(JSON.parse($('#recoverybox').val()));
+        });
+
+        if(key = $.getUrlVar('k')) {
+          loadMap(key);
+        }
+      });
+    </script>
+  </head>
+  <body onload="initialize()">
+    <div id="map_canvas" style="width:80%; height:100%; float:left;"></div>
+    <div style="width:15%; height:100%; float:left;">
+      <!-- <input type="button" id="reset" value="Reset"/> -->
+      <input type="button" id="save" value="Save"/><br/>
+      This map's URL:
+      <input type="text" name="savelink" id="savelink"/>
+      <hr/>
+      Recovery Box:
+      <textarea name="recoverybox" id="recoverybox"></textarea>
+      Just in case you're not able to save to the server, you can at least copy/paste this code somewhere safe until things are fixed.<br/>
+      <input type="button" id="load" value="Recover"/><br/>
+    </div>
+    <div style="display:none;">
+        <div id="editor">
+          <form id="neighborhood_name">
+            Neighborhood Name:<br/>
+            <input type="text" id="name" name="name"/>
+          </form>
+        </div>
+        <ul id="vertex_menu" class="jqcontextmenu">
+          <li><a href="#delete">Delete</a></li>
+        </ul>
+    </div>
+  </body>
+</html>
