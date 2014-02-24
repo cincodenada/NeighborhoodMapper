@@ -205,7 +205,7 @@
           $.post('savemap.php',{'mapdata':JSON.stringify(savedata)},function(data) {
             if(data.success) {
               alert("Saved!");
-              setLink(savedata.key);
+              setLink(data.key);
             } else {
               alert("Hmm, something went wrong saving.  If the error persists, use the recovery box.");
             }
